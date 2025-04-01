@@ -1,402 +1,111 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>GeoSpot - 3D Flat Map & Travel</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link href="https://cdn.jsdelivr.net/npm/mapbox-gl@2.15.0/dist/mapbox-gl.css" rel="stylesheet" />
-  <style>
-    /* --- Base Styles --- */
-    html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #040b17; color: #fff; }
-    #map { position: absolute; top: 0; bottom: 0; width: 100%; height: 100%; }
+/* --- Responsive Styles (Mobile First Approach is often better, but for adding to existing, this works) --- */
+@media (max-width: 600px) {
+    /* --- Styles below this line will ONLY apply when screen width is 600px or less --- */
 
-    /* --- UI Container & Scoreboard --- */
-    #ui-container { position: absolute; top: 0; left: 0; right: 0; padding: 15px; z-index: 2; pointer-events: none; display: flex; flex-direction: column; gap: 10px; align-items: center; }
-    #scoreboard { display: flex; justify-content: space-between; align-items: center; width: 100%; max-width: 1200px; pointer-events: auto; gap: 15px; }
-    #scoreboard-left, #scoreboard-center, #scoreboard-right { display: flex; align-items: center; gap: 10px; }
-    #scoreboard-left { flex-shrink: 0; } #scoreboard-center { flex-grow: 1; justify-content: center; } #scoreboard-right { flex-shrink: 0; }
-    .score-pill { background: rgba(0, 100, 0, 0.8); color: #ffffff; border-radius: 20px; padding: 8px 15px; font-size: 14px; font-weight: bold; box-shadow: 0 1px 4px rgba(0,0,0,0.4); text-align: center; backdrop-filter: blur(3px); border: 1px solid rgba(255, 255, 255, 0.2); transition: background-color 0.3s ease, transform 0.1s ease; white-space: nowrap; }
-    .score-pill#countryTab { padding: 10px 20px; font-size: 16px; min-width: 180px; max-width: 300px; overflow: hidden; text-overflow: ellipsis; }
-    #gameTitle { font-size: 16px; line-height: 1.2; background-color: rgba(0, 80, 0, 0.8); /* Slightly darker green for title */ }
-    #gameSubtitle { font-size: 11px; font-weight: normal; display: block; margin-top: 2px; opacity: 0.8; }
-
-    /* --- Exit Buttons Specific Styles --- */
-    .exit-button { /* Shared style for exit buttons */
-        background-color: #a03d3d; /* Dark red */
-        border-color: rgba(255, 150, 150, 0.3);
-        padding: 8px 15px; /* Match other pills */
-        font-size: 14px;   /* Match other pills */
-        cursor: pointer; /* Ensure pointer cursor */
-        display: none; /* Hidden by default */
+    /* Example: Make Scoreboard stack vertically */
+    #scoreboard {
+        flex-direction: column; /* Stack items top-to-bottom */
+        align-items: center;   /* Center items horizontally */
+        gap: 8px;             /* Reduce gap between stacked items */
     }
-    .exit-button:hover {
-        background-color: #c04d4d; /* Lighter red on hover */
+    #scoreboard-left,
+    #scoreboard-center,
+    #scoreboard-right {
+        width: 100%;          /* Allow sections to take full width if needed */
+        justify-content: center; /* Center content within each section */
+        gap: 5px; /* Reduce gap within right section */
     }
-    .exit-button:active {
-         transform: scale(0.98); /* Keep existing active effect */
+     #scoreboard-right {
+         flex-wrap: wrap; /* Allow pills in right section to wrap */
+     }
+
+    /* Example: Reduce font size and padding on score pills */
+    .score-pill {
+        font-size: 12px;
+        padding: 6px 10px;
     }
-    #exitGameBtn { /* Keep specific ID for game exit */ }
-    #exitTravelMapBtn { /* Specific ID for travel map exit */ }
-
-
-    /* --- Feedback --- */
-    #feedback { text-align: center; font-size: 18px; font-weight: bold; padding: 10px; background: rgba(0, 0, 0, 0.7); border-radius: 8px; max-width: 600px; width: fit-content; opacity: 0; transition: opacity 0.5s ease-in-out; pointer-events: none; color: #fff; text-shadow: 1px 1px 2px rgba(0,0,0,0.5); margin-top: 5px; /* Add margin since it's below scoreboard */}
-    #feedback.visible { opacity: 1; }
-    #feedback.correct { color: #4CAF50; background: rgba(76, 175, 80, 0.2); border: 1px solid rgba(76, 175, 80, 0.5); }
-    #feedback.incorrect { color: #f44336; background: rgba(244, 67, 54, 0.2); border: 1px solid rgba(244, 67, 54, 0.5); }
-    #feedback.info { color: #2196F3; background: rgba(33, 150, 243, 0.2); border: 1px solid rgba(33, 150, 243, 0.5); }
-
-    /* --- Splash Screen --- */
-    #splash { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: url('cover.png') no-repeat center center; background-color: #040b17; background-size: cover; z-index: 1000; display: flex; flex-direction: column; justify-content: center; align-items: center; color: #fff; font-size: 24px; text-shadow: 1px 1px 3px rgba(0,0,0,0.7); pointer-events: auto; transition: opacity 0.5s ease-out; }
-    #splash.hidden { opacity: 0; pointer-events: none; }
-    #settings { background: rgba(0, 0, 0, 0.8); padding: 25px 40px; border-radius: 12px; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.6); margin-top: 30px; backdrop-filter: blur(5px); }
-    #settings label { display: block; margin-bottom: 15px; font-size: 16px; color: #eee; }
-    #settings select, #settings input[type="checkbox"] { font-size: 15px; margin-left: 10px; vertical-align: middle; }
-    #settings input[type="checkbox"] { transform: scale(1.2); }
-    .splash-button { /* Common style for splash buttons */
-        padding: 12px 25px;
-        font-size: 18px;
-        cursor: pointer;
-        color: white;
-        border: none;
-        border-radius: 6px;
-        transition: background-color 0.3s, transform 0.1s;
-        margin-top: 10px;
-        margin-left: 5px; /* Add some spacing between buttons */
-        margin-right: 5px;
-    }
-    #startBtn { background-color: #4CAF50; }
-    #startBtn:hover { background-color: #45a049; }
-    #startBtn:active { transform: scale(0.98); }
-    #travelMapBtn { background-color: #2196F3; } /* Blue for Travel Map button */
-    #travelMapBtn:hover { background-color: #1e88e5; }
-    #travelMapBtn:active { transform: scale(0.98); }
-
-    /* --- Star Explosion --- */
-    @keyframes explode { 0% { opacity: 1; transform: translate(0, 0) scale(1); } 100% { opacity: 0; transform: translate(var(--dx), var(--dy)) scale(0.1); } }
-    .star-explosion { position: fixed; width: 14px; height: 14px; background: gold; border-radius: 50%; pointer-events: none; z-index: 9999; animation: explode 0.8s ease-out forwards; }
-
-    /* --- Footer --- */
-    #footer { position: absolute; bottom: 10px; width: 100%; text-align: center; color: rgba(255, 255, 255, 0.7); font-size: 12px; z-index: 1; text-shadow: 0 0 3px black; pointer-events: none; }
-
-    /* --- Bottom Left Controls --- */
-    #bottom-left-controls { position: absolute; bottom: 15px; left: 15px; z-index: 3; background: rgba(0, 0, 0, 0.6); padding: 10px 15px; border-radius: 8px; display: flex; flex-direction: column; /* Stack vertically */ align-items: flex-start; /* Align items left */ gap: 10px; pointer-events: auto; backdrop-filter: blur(3px); border: 1px solid rgba(255, 255, 255, 0.2); }
-    #muteBtn { padding: 5px 10px; font-size: 14px; cursor: pointer; background-color: #555; color: white; border: 1px solid #888; border-radius: 4px; min-width: 70px; text-align: center; transition: background-color 0.3s ease;}
-    #muteBtn:hover { background-color: #777; }
-    #volumeControl { display: flex; align-items: center; /* Keep label and slider aligned */ }
-    #volumeControl label { font-size: 12px; margin-right: 5px; vertical-align: middle; }
-    #volumeSlider { vertical-align: middle; cursor: pointer; width: 100px; }
-    /* --- Travel Map Legend --- */
-    #travel-legend { display: none; /* Hidden by default */ font-size: 12px; padding-top: 8px; border-top: 1px solid rgba(255, 255, 255, 0.2); width: 100%; }
-    .legend-item { display: flex; align-items: center; margin-bottom: 3px; }
-    .legend-color { width: 12px; height: 12px; margin-right: 6px; border: 1px solid rgba(255,255,255,0.5); }
-    .legend-green { background-color: rgba(76, 175, 80, 0.7); }
-    .legend-yellow { background-color: rgba(255, 235, 59, 0.7); }
-
-
-    /* --- Bottom Right Incorrect List --- */
-    #incorrect-list-container { position: absolute; bottom: 15px; right: 15px; z-index: 3; background: rgba(100, 0, 0, 0.7); padding: 10px 15px; border-radius: 8px; pointer-events: auto; backdrop-filter: blur(3px); border: 1px solid rgba(255, 100, 100, 0.3); max-height: 200px; overflow-y: auto; max-width: 200px; color: #eee; display: none; /* Hidden by default */ }
-    #incorrect-list-container.visible { display: block; }
-    #incorrect-list-container h4 { margin: 0 0 8px 0; font-size: 14px; font-weight: bold; border-bottom: 1px solid rgba(255,255,255,0.3); padding-bottom: 4px; text-align: center; }
-    #incorrect-list { list-style: none; padding: 0; margin: 0; font-size: 13px; }
-    #incorrect-list li { padding: 2px 0; opacity: 0.9; }
-
-
-    /* --- Responsive Styles --- */
-    @media (max-width: 600px) {
-        /* --- Styles below this line will ONLY apply when screen width is 600px or less --- */
-
-        /* Scoreboard Layout & Visibility */
-        #scoreboard {
-            flex-direction: column; /* Stack items top-to-bottom */
-            align-items: center;   /* Center items horizontally */
-            gap: 8px;             /* Reduce gap between stacked items */
-        }
-        #scoreboard-left {
-             display: none; /* <<< HIDE Title/Subtitle Section */
-        }
-        #scoreboard-center {
-             width: 100%;          /* Allow section to take full width */
-             justify-content: center; /* Center content */
-             order: 1; /* Ensure country name appears first */
-        }
-        #scoreboard-right {
-            width: 100%;          /* Allow section to take full width */
-            justify-content: center; /* Center remaining items */
-            gap: 10px; /* Keep some gap for score/exit button if visible */
-            flex-wrap: wrap; /* Allow items to wrap (though only score/exit might show) */
-            order: 2; /* Ensure score/exit appear below country name */
-        }
-        #roundTab, #streakTab {
-             display: none; /* <<< HIDE Round and Streak */
-        }
-        /* Make sure ScoreTab is visible (it should be by default, but explicit is safe) */
-        #scoreTab {
-             display: flex; /* Or inline-flex, check what .score-pill is */
-        }
-        /* Exit buttons are already handled by JS based on mode */
-
-
-        /* Reduce font size and padding on score pills */
-        .score-pill {
-            font-size: 12px;
-            padding: 6px 10px;
-        }
-        /* Adjust central country tab specifically */
-        .score-pill#countryTab {
-            font-size: 14px; /* Slightly larger than other pills */
-            padding: 8px 15px;
-            min-width: 150px;
-            max-width: 80%; /* Use percentage width */
-            order: 0; /* Make sure it's definitely first in its container visually */
-        }
-        /* Adjust score tab specifically if needed */
-        .score-pill#scoreTab {
-            padding: 6px 12px; /* Adjust padding */
-        }
-
-
-        /* Hide the game subtitle (already done in previous example, good to keep) */
-        #gameSubtitle {
-            display: none;
-        }
-
-        /* Adjust Splash Screen Settings Box */
-        #settings {
-            padding: 15px 20px; /* Reduce padding */
-            padding-top: 10px; /* <<< Reduce top padding */
-            padding-bottom: 15px; /* <<< Reduce bottom padding slightly */
-            width: 90%;       /* Make it slightly narrower than screen */
-            box-sizing: border-box; /* Include padding in width calculation */
-            margin-top: 15px; /* <<< Reduce space above the box */
-        }
-        #settings label {
-            font-size: 14px; /* Smaller label font */
-            margin-bottom: 10px;
-        }
-        #settings select, #settings input[type="checkbox"] {
-            font-size: 13px;
-        }
-        #settings > div { /* The container for the buttons */
-           display: flex;
-           flex-direction: column;
-           align-items: center;
-           gap: 10px;
-           margin-top: 5px; /* Reduce space above buttons */
-        }
-        .splash-button {
-             width: 80%;
-             font-size: 16px;
-             padding: 10px 15px;
-             margin-left: auto;
-             margin-right: auto;
-        }
-
-
-        /* Adjust Bottom Controls */
-        #bottom-left-controls {
-            padding: 8px 10px;
-            gap: 8px;
-            /* Position adjustments if needed */
-            left: 10px;
-            bottom: 10px;
-        }
-        #volumeControl {
-             display: none; /* <<< HIDE Volume Label and Slider */
-        }
-        #muteBtn { /* Mute button is still visible */
-            font-size: 12px;
-            padding: 4px 8px;
-            min-width: 60px;
-        }
-        #travel-legend { /* Adjust legend if visible in travel mode */
-            font-size: 10px; /* Even smaller */
-            padding-top: 5px;
-            border-top: none; /* Remove top border maybe? */
-        }
-        .legend-item { margin-bottom: 1px; }
-        .legend-color { width: 8px; height: 8px; margin-right: 4px; }
-
-
-        /* Adjust Incorrect List */
-         #incorrect-list-container {
-             bottom: 10px;
-             right: 10px;
-             max-width: 120px; /* Even narrower */
-             max-height: 100px; /* Even shorter */
-             padding: 6px 8px;
-         }
-         #incorrect-list-container h4 { font-size: 11px; margin-bottom: 4px; padding-bottom: 2px; }
-         #incorrect-list { font-size: 10px; }
-
-
-        /* Reduce general padding */
-        #ui-container {
-            padding: 5px; /* Reduce overall padding */
-            gap: 5px; /* Reduce gap between scoreboard/feedback */
-        }
-
-        /* Adjust Feedback text size */
-        #feedback {
-            font-size: 14px; /* Smaller feedback */
-            padding: 6px 10px;
-            max-width: 90%; /* Allow feedback to use more width */
-        }
-
-        /* Add any other adjustments needed */
-
+    .score-pill#countryTab {
+        font-size: 14px;
+        padding: 8px 15px;
+        min-width: 150px; /* Adjust min-width */
+        max-width: 250px; /* Adjust max-width */
     }
 
-  </style>
-</head>
-<body>
+    /* Example: Hide the subtitle on small screens */
+    #gameSubtitle {
+        display: none; /* Completely hide the subtitle */
+    }
 
-<!-- UI Elements -->
-<div id="ui-container">
-  <div id="scoreboard">
-    <div id="scoreboard-left">
-      <div class="score-pill" id="gameTitle">
-        GeoSpot
-        <span id="gameSubtitle">3D flat map: click the country!</span>
-      </div>
-    </div>
-    <div id="scoreboard-center">
-      <div class="score-pill" id="countryTab">
-        <span id="countryName">Loading...</span>
-        <span id="timerDisplay" style="margin-left: 10px; font-weight: normal; opacity: 0.8;"></span>
-      </div>
-    </div>
-    <div id="scoreboard-right">
-      <div class="score-pill" id="scoreTab"> SCORE: <span id="totalScore">0</span> </div>
-      <div class="score-pill" id="roundTab"> ROUND: <span id="round">0/10</span> </div>
-      <div class="score-pill" id="streakTab"> STREAK: <span id="streak">0</span> </div>
-      <button id="exitGameBtn" class="score-pill exit-button">Exit Game</button> <!-- Game Exit Button -->
-      <button id="exitTravelMapBtn" class="score-pill exit-button">Exit Travel Map</button> <!-- Travel Map Exit Button -->
-    </div>
-  </div>
-  <div id="feedback"></div>
-</div>
-<div id="map"></div>
-<div id="splash">
-  <div id="coverMessage">Welcome to GeoSpot!</div>
-  <div id="settings">
-    <label>
-      Difficulty:
-      <select id="difficulty" style="padding: 5px;">
-        <option value="tourist">Tourist (20s - Names Visible)</option>
-        <option value="easy">Easy (30s)</option>
-        <option value="medium" selected>Medium (20s)</option>
-        <option value="hard">Hard (15s)</option>
-      </select>
-    </label>
-    <label>
-      <input type="checkbox" id="timerToggle" checked> Timer Enabled
-    </label>
-    <div> <!-- Container for buttons -->
-      <button id="startBtn" class="splash-button" disabled>Loading Data...</button>
-      <button id="travelMapBtn" class="splash-button" disabled>Travel Map</button> <!-- New Travel Map Button -->
-    </div> <!-- End Container for buttons -->
-  </div>
-</div>
-<div id="footer"> © Creative Forge 2025 </div>
-<div id="bottom-left-controls">
-  <button id="muteBtn">Mute</button>
-  <div id="volumeControl">
-    <label for="volumeSlider">Music:</label>
-    <input type="range" id="volumeSlider" min="0" max="1" step="0.05" value="0.3">
-  </div>
-   <!-- New Travel Map Legend -->
-   <div id="travel-legend">
-      <div>Click country to cycle:</div>
-      <div class="legend-item"><div class="legend-color legend-green"></div> Visited</div>
-      <div class="legend-item"><div class="legend-color legend-yellow"></div> Wishlist</div>
-      <div>(Click again for None)</div>
-  </div>
-</div>
-<div id="incorrect-list-container">
-    <h4>Missed Countries</h4>
-    <ul id="incorrect-list"></ul>
-</div>
+    /* Example: Adjust Splash Screen Settings Box */
+    #settings {
+        padding: 15px 20px; /* Reduce padding */
+        width: 90%;       /* Make it slightly narrower than screen */
+        box-sizing: border-box; /* Include padding in width calculation */
+    }
+    #settings label {
+        font-size: 14px; /* Smaller label font */
+        margin-bottom: 10px;
+    }
+    #settings select, #settings input[type="checkbox"] {
+        font-size: 13px;
+    }
+    /* Example: Stack Splash Screen Buttons */
+    #settings div { /* The container for the buttons */
+       display: flex;
+       flex-direction: column;
+       align-items: center;
+       gap: 10px; /* Add space between stacked buttons */
+    }
+    .splash-button {
+         width: 80%; /* Make buttons wider */
+         font-size: 16px;
+         padding: 10px 15px;
+         margin-left: auto; /* Remove side margins */
+         margin-right: auto;
+    }
 
-<!-- Libraries -->
-<script src="https://cdn.jsdelivr.net/npm/mapbox-gl@2.15.0/dist/mapbox-gl.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@turf/turf@6.5.0/turf.min.js"></script>
 
-<script>
- // --- JS Code remains exactly the same as the previous version ---
- // --- No changes needed in the <script> block for these CSS adjustments ---
+    /* Example: Adjust Bottom Controls */
+    #bottom-left-controls {
+        padding: 8px 10px; /* Smaller padding */
+        gap: 8px;
+        /* Maybe adjust position if needed, e.g., bottom: 10px; left: 10px; */
+    }
+    #muteBtn {
+        font-size: 12px;
+        padding: 4px 8px;
+        min-width: 60px;
+    }
+    #volumeControl label { font-size: 11px; }
+    #volumeSlider { width: 80px; }
+    #travel-legend { font-size: 11px; }
+    .legend-item { margin-bottom: 2px; }
+    .legend-color { width: 10px; height: 10px; }
 
- // --- CONFIGURATION ---
-  mapboxgl.accessToken = 'pk.eyJ1IjoienVrdG9vcjIiLCJhIjoiY204dWkydnFyMGJnZDJpb3AycWdubGM1dCJ9.c05BLwdcTXP5QAysXxCQyg'; // Your token
-  const MAX_ROUNDS = 10;
-  const COUNTRIES_URL = 'countries.geo.json';
-  const BACKGROUND_MUSIC_FILES = ['relax1.mp3', 'relax2.mp3', 'relax3.mp3'];
-  const INITIAL_MUSIC_VOLUME = 0.3;
-  const TRAVEL_STORAGE_KEY = 'geoSpotTravelData'; // Key for localStorage
 
-  // --- DOM ELEMENTS ---
-  let mapContainer, splashScreen, startBtn, difficultySelect, timerToggle, countryNameEl,
-      timerDisplayEl, totalScoreEl, roundEl, streakEl, feedbackEl, muteBtn,
-      volumeSlider, incorrectListEl, incorrectListContainerEl, exitGameBtn,
-      travelMapBtn, exitTravelMapBtn, travelLegendEl, scoreboardCenterEl,
-      scoreboardLeftEl, scoreboardRightEl, gameTitleEl;
+    /* Example: Adjust Incorrect List */
+     #incorrect-list-container {
+         bottom: 10px;
+         right: 10px;
+         max-width: 150px; /* Make it narrower */
+         max-height: 120px; /* Make it shorter */
+         padding: 8px 10px;
+     }
+     #incorrect-list-container h4 { font-size: 12px; }
+     #incorrect-list { font-size: 11px; }
 
-  // --- MAP & GAME STATE ---
-  let map;
-  const game = {
-    countriesGeoJson: null, countryFeaturesMap: new Map(), currentCountry: null,
-    totalScore: 0, round: 0, streak: 0, timerEnabled: true, difficulty: 'medium',
-    timerInterval: null, timeLeft: 0, isInputAllowed: false, currentMarker: null,
-    sounds: {}, backgroundMusic: null, isLoaded: false, feedbackTimeout: null,
-    isMuted: false, musicVolumePreference: INITIAL_MUSIC_VOLUME, isGameRunning: false,
-    incorrectlyGuessedCountries: new Set(),
-    currentMode: 'splash', // 'splash', 'game', 'travel'
-    travelData: {} // { 'Country Name': 'visited' | 'wishlist', ... }
-  };
 
-  // --- SOUND HANDLING (Unchanged) ---
-  function loadSounds() { const soundFiles = ['correct', 'wrong', 'timeout', 'start', 'gameover']; soundFiles.forEach(name => { try { game.sounds[name] = new Audio(`${name}.mp3`); game.sounds[name].onerror = () => console.warn(`Could not load sound: ${name}.mp3`); } catch(e) { console.error(`Error creating Audio for ${name}.mp3`, e); } }); }
-  function playSound(name) { if (game.isMuted) return; if (game.sounds[name]) { game.sounds[name].currentTime = 0; game.sounds[name].play().catch(e => console.warn(`Sound play error (${name}):`, e)); } }
-  function startBackgroundMusic() { stopBackgroundMusic(); if (game.isMuted || BACKGROUND_MUSIC_FILES.length === 0) return; const randomIndex = Math.floor(Math.random() * BACKGROUND_MUSIC_FILES.length); const musicFile = BACKGROUND_MUSIC_FILES[randomIndex]; console.log(`Starting background music: ${musicFile}`); try { game.backgroundMusic = new Audio(musicFile); game.backgroundMusic.loop = true; game.backgroundMusic.volume = game.musicVolumePreference; volumeSlider.value = game.musicVolumePreference; game.backgroundMusic.play().catch(error => { console.warn(`Background music play error (${musicFile}):`, error); game.backgroundMusic = null; }); } catch(e) { console.error(`Error creating Audio for background music ${musicFile}`, e); game.backgroundMusic = null; } }
-  function stopBackgroundMusic() { if (game.backgroundMusic) { console.log("Stopping background music"); game.backgroundMusic.pause(); game.backgroundMusic.currentTime = 0; game.backgroundMusic = null; } }
-  function toggleMute() { game.isMuted = !game.isMuted; console.log("Mute toggled. Is muted:", game.isMuted); muteBtn.innerText = game.isMuted ? 'Unmute' : 'Mute'; muteBtn.style.backgroundColor = game.isMuted ? '#f44336' : '#555'; if (game.isMuted) { stopBackgroundMusic(); } else { if (game.isGameRunning || game.currentMode === 'travel') { startBackgroundMusic(); } } }
-  function updateMusicVolume(volume) { game.musicVolumePreference = parseFloat(volume); console.log("Music volume preference set to:", game.musicVolumePreference); if (game.backgroundMusic) { game.backgroundMusic.volume = game.musicVolumePreference; } }
+    /* Example: Reduce general padding */
+    #ui-container {
+        padding: 10px;
+    }
 
-  // --- UI UPDATES ---
-  function updateScoreboard() { if(totalScoreEl) totalScoreEl.innerText = game.totalScore; if(roundEl) roundEl.innerText = `${game.round}/${MAX_ROUNDS}`; if(streakEl) streakEl.innerText = game.streak; }
-  function showFeedback(message, type = 'info', duration = 3000) { console.log(`Showing feedback (${type}): ${message}`); if(!feedbackEl) return; feedbackEl.innerText = message; feedbackEl.className = `visible ${type}`; if (game.feedbackTimeout) clearTimeout(game.feedbackTimeout); game.feedbackTimeout = setTimeout(() => { feedbackEl.className = ''; game.feedbackTimeout = null; }, duration); }
-  function updateTimerDisplay() { if(!timerDisplayEl) return; if (game.timerEnabled && game.timeLeft > 0 && game.currentMode === 'game') { timerDisplayEl.innerText = `(${game.timeLeft}s)`; } else { timerDisplayEl.innerText = ''; } }
-  function clearHighlight() { try { if (map && map.getSource('highlight-source') && map.getLayer('highlight-layer')) { map.getSource('highlight-source').setData({ type: 'FeatureCollection', features: [] }); console.log("Temporary green highlight cleared."); } } catch(e) { console.error("Error clearing highlight:", e)} }
-  function highlightCountry(countryFeature) { const countryName = countryFeature?.properties?.name || "Unknown"; console.log(`Showing temporary green highlight for: ${countryName}`); try { clearHighlight(); if (map && map.getSource('highlight-source') && map.getLayer('highlight-layer') && countryFeature) { map.getSource('highlight-source').setData(countryFeature); } else if (!countryFeature) { console.warn("highlightCountry called with null feature"); } } catch(e) { console.error("Error highlighting country:", e)} }
-  function clearMarker() { try { if (game.currentMarker) { game.currentMarker.remove(); game.currentMarker = null; console.log("Marker cleared"); } } catch(e) { console.error("Error clearing marker:", e)} }
-  function addMarker(lngLat, color = 'red') { try { clearMarker(); if (!Array.isArray(lngLat) || lngLat.length !== 2 || typeof lngLat[0] !== 'number' || typeof lngLat[1] !== 'number') { console.error("Invalid LngLat for addMarker:", lngLat); return; } console.log("Adding marker at:", lngLat, "with color:", color); game.currentMarker = new mapboxgl.Marker({ color: color }).setLngLat(lngLat).addTo(map); } catch(e) { console.error("Error adding marker:", e)} }
-  function updateMissedCountriesUI() { if (!incorrectListEl || !incorrectListContainerEl) return; incorrectListEl.innerHTML = ''; if (game.incorrectlyGuessedCountries.size === 0) { incorrectListContainerEl.classList.remove('visible'); } else { incorrectListContainerEl.classList.add('visible'); const sortedNames = Array.from(game.incorrectlyGuessedCountries).sort(); sortedNames.forEach(name => { const listItem = document.createElement('li'); listItem.textContent = name; incorrectListEl.appendChild(listItem); }); incorrectListContainerEl.scrollTop = incorrectListContainerEl.scrollHeight; } try { if (map && map.getSource('missed-labels-source')) { const labelFeatures = []; for (const countryName of game.incorrectlyGuessedCountries) { const featureData = game.countryFeaturesMap.get(countryName); if (featureData && featureData.properties?.center) { labelFeatures.push({ type: 'Feature', geometry: { type: 'Point', coordinates: featureData.properties.center }, properties: { name: countryName } }); } else { console.warn(`Could not find feature or center for missed country label: ${countryName}`); } } map.getSource('missed-labels-source').setData({ type: 'FeatureCollection', features: labelFeatures }); console.log(`Updated missed-labels-source with ${labelFeatures.length} features.`); } else if (map && game.incorrectlyGuessedCountries.size > 0) { console.warn("Map source 'missed-labels-source' not ready for update."); } } catch(e) { console.error("Error updating missed labels source:", e); } try { if (map && map.getSource('persistent-red-source')) { const missedFeatures = []; for (const countryName of game.incorrectlyGuessedCountries) { const featureData = game.countryFeaturesMap.get(countryName); if (featureData) { missedFeatures.push(featureData); } else { console.warn(`Could not find feature data for persistent red highlight: ${countryName}`); } } map.getSource('persistent-red-source').setData({ type: 'FeatureCollection', features: missedFeatures }); console.log(`Updated persistent-red-source with ${missedFeatures.length} features.`); } else if (map && game.incorrectlyGuessedCountries.size > 0) { console.warn("Map source 'persistent-red-source' not ready for update."); } } catch(e) { console.error("Error updating persistent red source:", e); } }
+    /* Example: Adjust Feedback text size */
+    #feedback {
+        font-size: 15px;
+        padding: 8px;
+    }
 
-  // --- TRAVEL MAP UI & LOGIC ---
-  function loadTravelData() { console.log("Loading travel data from localStorage..."); try { const storedData = localStorage.getItem(TRAVEL_STORAGE_KEY); if (storedData) { game.travelData = JSON.parse(storedData); console.log(`Loaded ${Object.keys(game.travelData).length} travel entries.`); } else { game.travelData = {}; console.log("No travel data found in localStorage."); } } catch (e) { console.error("Error loading travel data:", e); game.travelData = {}; } }
-  function saveTravelData() { console.log("Saving travel data to localStorage..."); try { localStorage.setItem(TRAVEL_STORAGE_KEY, JSON.stringify(game.travelData)); console.log(`Saved ${Object.keys(game.travelData).length} travel entries.`); } catch (e) { console.error("Error saving travel data:", e); } }
-  function setCountryTravelState(countryName, countryId, state) { if (!map || !countryName || typeof countryId === 'undefined') return; console.log(`Setting travel state for ${countryName} (ID: ${countryId}) to: ${state}`); if (state) { game.travelData[countryName] = state; } else { delete game.travelData[countryName]; } map.removeFeatureState({ source: 'countries', id: countryId }); if (state) { map.setFeatureState( { source: 'countries', id: countryId }, { travelStatus: state } ); } }
-  function updateAllCountryTravelStates() { if (!map || !game.countriesGeoJson) return; console.log("Applying all stored travel states to map..."); game.countriesGeoJson.features.forEach(feature => { if (typeof feature.id !== 'undefined') { map.removeFeatureState({ source: 'countries', id: feature.id }, 'travelStatus'); } }); for (const countryName in game.travelData) { const feature = game.countryFeaturesMap.get(countryName); if (feature && typeof feature.id !== 'undefined') { map.setFeatureState( { source: 'countries', id: feature.id }, { travelStatus: game.travelData[countryName] } ); } else { console.warn(`Could not find feature or ID for ${countryName} while applying travel states.`); } } console.log("Finished applying travel states."); }
-  function enterTravelMapMode() { console.log("Entering Travel Map Mode"); if (!game.isLoaded) { showFeedback("Map data not loaded yet.", "incorrect"); return; } game.currentMode = 'travel'; game.isGameRunning = false; stopBackgroundMusic(); startBackgroundMusic(); splashScreen.classList.add('hidden'); clearFeedback(); clearHighlight(); clearMarker(); if(scoreboardCenterEl) scoreboardCenterEl.style.visibility = 'hidden'; if(scoreboardLeftEl) scoreboardLeftEl.style.visibility = 'hidden'; if(scoreboardRightEl) { Array.from(scoreboardRightEl.children).forEach(el => { if (el.id === 'exitTravelMapBtn') el.style.display = 'inline-flex'; else if (el.id !== 'exitGameBtn') el.style.display = 'none'; }); } if(exitGameBtn) exitGameBtn.style.display = 'none'; if(travelLegendEl) travelLegendEl.style.display = 'block'; if(incorrectListContainerEl) incorrectListContainerEl.classList.remove('visible'); try { if (map.getLayer('all-country-labels')) map.setLayoutProperty('all-country-labels', 'visibility', 'visible'); if (map.getLayer('travel-visited-layer')) map.setLayoutProperty('travel-visited-layer', 'visibility', 'visible'); if (map.getLayer('travel-wishlist-layer')) map.setLayoutProperty('travel-wishlist-layer', 'visibility', 'visible'); if (map.getLayer('persistent-red-layer')) map.setLayoutProperty('persistent-red-layer', 'visibility', 'none'); if (map.getLayer('missed-labels-layer')) map.setLayoutProperty('missed-labels-layer', 'visibility', 'none'); if (map.getLayer('highlight-layer')) map.setLayoutProperty('highlight-layer', 'visibility', 'none'); } catch (e) { console.error("Error setting map properties for Travel Mode:", e); } updateAllCountryTravelStates(); map.flyTo({ center: [0, 20], zoom: 1.8, pitch: 40, bearing: 0, speed: 0.7, curve: 1, essential: true }); }
-  function exitTravelMapMode() { console.log("Exiting Travel Map Mode"); game.currentMode = 'splash'; saveTravelData(); stopBackgroundMusic(); splashScreen.classList.remove('hidden'); if(scoreboardCenterEl) scoreboardCenterEl.style.visibility = 'visible'; if(scoreboardLeftEl) scoreboardLeftEl.style.visibility = 'visible'; if(scoreboardRightEl) { Array.from(scoreboardRightEl.children).forEach(el => { if (el.id === 'exitTravelMapBtn' || el.id === 'exitGameBtn') { el.style.display = 'none'; } else { el.style.display = 'flex'; } }); } if(travelLegendEl) travelLegendEl.style.display = 'none'; clearFeedback(); clearMarker(); try { if (map.getLayer('all-country-labels')) map.setLayoutProperty('all-country-labels', 'visibility', 'none'); if (map.getLayer('travel-visited-layer')) map.setLayoutProperty('travel-visited-layer', 'visibility', 'none'); if (map.getLayer('travel-wishlist-layer')) map.setLayoutProperty('travel-wishlist-layer', 'visibility', 'none'); if (map.getLayer('persistent-red-layer')) map.setLayoutProperty('persistent-red-layer', 'visibility', 'visible'); if (map.getLayer('missed-labels-layer')) map.setLayoutProperty('missed-labels-layer', 'visibility', 'visible'); if (map.getLayer('highlight-layer')) map.setLayoutProperty('highlight-layer', 'visibility', 'visible'); } catch (e) { console.error("Error resetting map properties after Travel Mode:", e); } if(countryNameEl) countryNameEl.innerText = "Play Again?"; if(totalScoreEl) totalScoreEl.innerText = "0"; if(roundEl) roundEl.innerText = "0/10"; if(streakEl) streakEl.innerText = "0"; updateTimerDisplay(); if(game.isLoaded) { startBtn.disabled = false; travelMapBtn.disabled = false; startBtn.innerText = "Start Game"; } }
-  function handleTravelMapClick(e) { if (game.currentMode !== 'travel') return; console.log("--- handleTravelMapClick start ---"); if (!e?.lngLat?.lng || !e?.lngLat?.lat) { console.error("Invalid click event data:", e); return; } const features = map.queryRenderedFeatures(e.point, { layers: ['country-fill-base'] }); if (!features.length) { console.log("Clicked empty space."); return; } const clickedMapFeature = features[0]; const countryId = clickedMapFeature.id; const countryName = clickedMapFeature.properties.name; if (typeof countryId === 'undefined' || !countryName) { console.warn("Clicked feature missing ID or name:", clickedMapFeature); return; } console.log(`Clicked country: ${countryName} (ID: ${countryId})`); const currentState = game.travelData[countryName]; let nextState = null; if (!currentState) { nextState = 'visited'; showFeedback(`${countryName}: Marked as Visited`, 'info', 1500); } else if (currentState === 'visited') { nextState = 'wishlist'; showFeedback(`${countryName}: Added to Wishlist`, 'info', 1500); } else if (currentState === 'wishlist') { nextState = null; showFeedback(`${countryName}: Removed travel status`, 'info', 1500); } setCountryTravelState(countryName, countryId, nextState); saveTravelData(); console.log("--- handleTravelMapClick end ---"); }
+    /* Add any other adjustments needed */
 
-  // --- GAME LOGIC ---
-  async function loadGameData() { console.log("loadGameData: Starting..."); try { const res = await fetch(COUNTRIES_URL); if (!res.ok) throw new Error(`HTTP error! status: ${res.status} fetching ${COUNTRIES_URL}`); const rawGeoJson = await res.json(); let processedCount = 0, failedCentroidCount = 0; game.countryFeaturesMap.clear(); const validFeatures = []; if (!rawGeoJson || !Array.isArray(rawGeoJson.features)) { throw new Error("Invalid GeoJSON structure: 'features' array not found."); } rawGeoJson.features.forEach((f, index) => { if (!f || !f.properties || !f.geometry) { failedCentroidCount++; return; } f.id = index; const countryName = f.properties.name; try { const pointOnSurface = turf.pointOnFeature(f); f.properties.center = pointOnSurface.geometry.coordinates; if (countryName && typeof countryName === 'string' && countryName.trim() !== '') { game.countryFeaturesMap.set(countryName, f); validFeatures.push(f); processedCount++; } else { failedCentroidCount++; } } catch (e) { f.properties.center = null; failedCentroidCount++; } }); console.log(`loadGameData: Centroid/Map complete. Added: ${processedCount}, Failed/Skipped: ${failedCentroidCount}`); game.countriesGeoJson = { type: "FeatureCollection", features: validFeatures }; if (game.countriesGeoJson.features.length === 0) throw new Error("No valid country features found after processing."); console.log("loadGameData: Adding/Verifying map sources and layers..."); if (!map.getSource('countries')) { map.addSource('countries', { type: 'geojson', data: game.countriesGeoJson }); console.log("Added 'countries' source."); } else { map.getSource('countries').setData(game.countriesGeoJson); console.log("Updated 'countries' source."); } if (!map.getLayer('country-fill-base')) { map.addLayer({ id: 'country-fill-base', type: 'fill', source: 'countries', paint: { 'fill-color': 'transparent' } }); console.log("Added 'country-fill-base' layer."); } if (!map.getLayer('country-borders')) { map.addLayer({ id: 'country-borders', type: 'line', source: 'countries', paint: { 'line-color': '#ffffff', 'line-width': 0.8, 'line-opacity': 0.6 } }, 'country-fill-base'); console.log("Added 'country-borders'."); } if (!map.getSource('highlight-source')) { map.addSource('highlight-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } }); console.log("Added 'highlight-source'."); } if (!map.getLayer('highlight-layer')) { map.addLayer({ id: 'highlight-layer', type: 'fill', source: 'highlight-source', paint: { 'fill-color': '#00ff00', 'fill-opacity': 0.4 }, layout: { visibility: 'visible'} }, 'country-borders'); console.log("Added 'highlight-layer'."); } if (!map.getSource('persistent-red-source')) { map.addSource('persistent-red-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } }); console.log("Added 'persistent-red-source'."); } if (!map.getLayer('persistent-red-layer')) { map.addLayer({ id: 'persistent-red-layer', type: 'fill', source: 'persistent-red-source', paint: { 'fill-color': '#f44336', 'fill-opacity': 0.35 }, layout: { visibility: 'visible' } }, 'highlight-layer'); console.log("Added 'persistent-red-layer'."); } if (!map.getSource('missed-labels-source')) { map.addSource('missed-labels-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } }); console.log("Added 'missed-labels-source'."); } if (!map.getLayer('missed-labels-layer')) { map.addLayer({ id: 'missed-labels-layer', type: 'symbol', source: 'missed-labels-source', layout: { 'text-field': ['get', 'name'], 'text-font': ['Open Sans Semibold', 'Arial Unicode MS Bold'], 'text-size': 12, 'text-anchor': 'top', 'text-offset': [0, 0.6], 'text-allow-overlap': false, visibility: 'visible' }, paint: { 'text-color': '#FFDDDD', 'text-halo-color': '#330000', 'text-halo-width': 1.5, 'text-halo-blur': 0.5 } }, 'persistent-red-layer'); console.log("Added 'missed-labels-layer'."); } if (!map.getLayer('travel-visited-layer')) { map.addLayer({ id: 'travel-visited-layer', type: 'fill', source: 'countries', paint: { 'fill-color': '#4CAF50', 'fill-opacity': ['case',['==', ['feature-state', 'travelStatus'], 'visited'], 0.6, 0] }, layout: { visibility: 'none' } }, 'missed-labels-layer'); console.log("Added 'travel-visited-layer'."); } if (!map.getLayer('travel-wishlist-layer')) { map.addLayer({ id: 'travel-wishlist-layer', type: 'fill', source: 'countries', paint: { 'fill-color': '#FFEB3B', 'fill-opacity': ['case',['==', ['feature-state', 'travelStatus'], 'wishlist'], 0.6, 0] }, layout: { visibility: 'none' } }, 'travel-visited-layer'); console.log("Added 'travel-wishlist-layer'."); } if (!map.getLayer('all-country-labels')) { map.addLayer({ id: 'all-country-labels', type: 'symbol', source: 'countries', layout: { 'text-field': ['get', 'name'], 'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'], 'text-size': 11, 'text-anchor': 'center', 'text-allow-overlap': false, 'text-optional': true, 'visibility': 'none' }, paint: { 'text-color': '#ffffff', 'text-halo-color': '#111133', 'text-halo-width': 1.5, 'text-halo-blur': 1 } }); console.log("loadGameData: General labels layer added."); } else { console.log("loadGameData: General labels layer already exists."); map.setLayoutProperty('all-country-labels', 'visibility', 'none'); } game.isLoaded = true; console.log("loadGameData: Game marked as loaded. Updating UI."); if(countryNameEl) countryNameEl.innerText = "Ready!"; if(startBtn) { startBtn.disabled = false; startBtn.innerText = "Start Game"; } if(travelMapBtn) { travelMapBtn.disabled = false; } console.log("loadGameData: Finished successfully."); } catch (error) { console.error("--- loadGameData FAILED ---:", error); if(countryNameEl) countryNameEl.innerText = "Error!"; showFeedback(`Data Load Failed: ${error.message}. Check console.`, 'incorrect', 15000); if(startBtn) { startBtn.disabled = true; startBtn.innerText = "Error Loading"; } if(travelMapBtn) { travelMapBtn.disabled = true; } } }
-  function startGame() { if (!game.isLoaded || game.isGameRunning || game.currentMode === 'travel') { return; } game.currentMode = 'game'; if (!game.isMuted) playSound('start'); startBackgroundMusic(); game.isGameRunning = true; game.totalScore = 0; game.round = 0; game.streak = 0; game.difficulty = difficultySelect.value; game.timerEnabled = timerToggle.checked; game.isInputAllowed = false; game.incorrectlyGuessedCountries.clear(); updateMissedCountriesUI(); updateScoreboard(); splashScreen.classList.add('hidden'); clearFeedback(); if(scoreboardCenterEl) scoreboardCenterEl.style.visibility = 'visible'; if(scoreboardLeftEl) scoreboardLeftEl.style.visibility = 'visible'; if(scoreboardRightEl) { Array.from(scoreboardRightEl.children).forEach(el => { if (el.id === 'exitGameBtn') el.style.display = 'inline-flex'; else if (el.id !== 'exitTravelMapBtn') el.style.display = 'flex'; }); if(exitTravelMapBtn) exitTravelMapBtn.style.display = 'none'; } if(travelLegendEl) travelLegendEl.style.display = 'none'; try { if (map.getLayer('all-country-labels')) { map.setLayoutProperty('all-country-labels', 'visibility', game.difficulty === 'tourist' ? 'visible' : 'none'); } if (map.getLayer('travel-visited-layer')) map.setLayoutProperty('travel-visited-layer', 'visibility', 'none'); if (map.getLayer('travel-wishlist-layer')) map.setLayoutProperty('travel-wishlist-layer', 'visibility', 'none'); if (map.getLayer('persistent-red-layer')) map.setLayoutProperty('persistent-red-layer', 'visibility', 'visible'); if (map.getLayer('missed-labels-layer')) map.setLayoutProperty('missed-labels-layer', 'visibility', 'visible'); if (map.getLayer('highlight-layer')) map.setLayoutProperty('highlight-layer', 'visibility', 'visible'); } catch(e) { console.error("Error setting label/layer visibility in startGame:", e); } setTimeout(() => { console.log("Starting first round..."); pickNextCountry(); }, 500); }
-  function pickNextCountry() { console.log(`--- Starting pickNextCountry for round ${game.round + 1} ---`); clearHighlight(); clearMarker(); if (game.feedbackTimeout) clearTimeout(game.feedbackTimeout); feedbackEl.className = ''; if (game.round >= MAX_ROUNDS) { console.log("Max rounds reached. Ending game."); endGame(); return; } game.round++; game.currentCountry = getRandomCountry(); if (!game.currentCountry) { console.error("Failed to get random country. Ending."); endGame("Error: Could not select a country."); return; } console.log(`Selected: ${game.currentCountry.properties.name} (ID: ${game.currentCountry.id})`); if(countryNameEl) countryNameEl.innerText = game.currentCountry.properties.name; updateScoreboard(); const neutralCenter = [0, 20], neutralZoom = 1.8, neutralPitch = 40, neutralBearing = 0; console.log("Resetting map view..."); map.flyTo({ center: neutralCenter, zoom: neutralZoom, pitch: neutralPitch, bearing: neutralBearing, speed: 0.7, curve: 1, essential: true }); let inputEnabled = false; const enableInput = () => { if (inputEnabled || !game.isGameRunning || game.currentMode !== 'game') return; inputEnabled = true; console.log("Map move/fallback: Enabling game input."); if (game.timerEnabled) { startTimer(); } else { updateTimerDisplay(); } game.isInputAllowed = true; }; map.once('moveend', enableInput); setTimeout(() => { if (!inputEnabled && game.isGameRunning && game.currentMode === 'game') { console.warn("Moveend fallback triggered."); enableInput(); } }, 1500); console.log("pickNextCountry finished setup."); }
-  function getRandomCountry() { console.log("Selecting random country..."); const availableCountries = game.countriesGeoJson?.features; if (!availableCountries || availableCountries.length === 0) { console.error("No countries available!"); return null; } let attempts = 0; const maxAttempts = availableCountries.length * 2; while(attempts < maxAttempts) { attempts++; const randomIndex = Math.floor(Math.random() * availableCountries.length); const country = availableCountries[randomIndex]; if (country?.properties?.name && country.geometry && country.properties.center) { console.log(`Valid country found: ${country.properties.name}`); return country; } } console.error(`Could not find a valid country after ${maxAttempts} attempts.`); return null; }
-  function startTimer() { clearInterval(game.timerInterval); const durations = { tourist: 20, easy: 30, medium: 20, hard: 15 }; game.timeLeft = durations[game.difficulty] || 20; console.log(`Starting timer: ${game.timeLeft} seconds.`); updateTimerDisplay(); game.timerInterval = setInterval(() => { if (!game.isGameRunning || game.currentMode !== 'game') { clearInterval(game.timerInterval); return; } game.timeLeft--; updateTimerDisplay(); if (game.timeLeft <= 0) { console.log("Timer reached zero."); handleTimeout(); } }, 1000); }
-  function handleTimeout() { console.log("handleTimeout called"); clearInterval(game.timerInterval); playSound('timeout'); game.isInputAllowed = false; game.streak = 0; updateScoreboard(); const countryName = game.currentCountry?.properties?.name; showFeedback(`⏰ Time's up! It was ${countryName || 'the country'}.`, 'incorrect', 4000); if(game.currentCountry) { if (game.currentCountry.properties?.center) addMarker(game.currentCountry.properties.center, 'orange'); if (countryName) { game.incorrectlyGuessedCountries.add(countryName); updateMissedCountriesUI(); } } console.log("Setting timeout for next country..."); setTimeout(() => { if(game.isGameRunning && game.currentMode === 'game') pickNextCountry(); }, 4500); }
-  function handleMapClick(e) { if (game.currentMode !== 'game') return; console.log("--- handleMapClick (Game Mode) start ---"); if (!e?.lngLat?.lng || !e?.lngLat?.lat) { console.error("Invalid click event data:", e); return; } const clickedCoords = [e.lngLat.lng, e.lngLat.lat]; if (!game.isInputAllowed || !game.currentCountry) { console.log(`Click ignored: InputAllowed=${game.isInputAllowed}, CurrentCountry=${!!game.currentCountry}`); return; } console.log(`Processing click at: Lng: ${clickedCoords[0]}, Lat: ${clickedCoords[1]}`); game.isInputAllowed = false; clearInterval(game.timerInterval); console.log("Input disabled, timer stopped."); const clickedPoint = turf.point(clickedCoords); let isCorrect = false; const targetCenter = game.currentCountry.properties?.center; const countryName = game.currentCountry.properties?.name || "Unknown"; const countryGeometry = game.currentCountry.geometry; if (countryGeometry) { try { isCorrect = turf.booleanPointInPolygon(clickedPoint, countryGeometry); console.log(`Point check result: ${isCorrect}`); } catch (error) { console.error(`Error checking point in polygon:`, error); isCorrect = false; showFeedback("Error checking location.", "incorrect", 3000); } } else { console.warn(`Geometry missing for ${countryName}.`); isCorrect = false; } if (isCorrect) { console.log("Answer is CORRECT"); playSound('correct'); game.streak++; const pointsEarned = 100 * game.streak; game.totalScore += pointsEarned; showFeedback(`✅ Correct! +${pointsEarned} pts. Streak: ${game.streak}`, 'correct', 3000); if (targetCenter) explodeAtLatLng(targetCenter); highlightCountry(game.currentCountry); addMarker(clickedCoords, 'green'); } else { console.log("Answer is INCORRECT"); playSound('wrong'); game.streak = 0; if (countryName !== "Unknown") { game.incorrectlyGuessedCountries.add(countryName); updateMissedCountriesUI(); } let distance = 'N/A', pointsEarned = 0; if (targetCenter) { try { const distKm = turf.distance(clickedCoords, targetCenter, { units: 'kilometers' }); distance = distKm.toFixed(0); pointsEarned = Math.max(0, Math.round(100 - distKm / 50)); } catch(distError) { console.error(`Error calc distance:`, distError); distance = 'Error'; pointsEarned = 0; } } else { console.warn(`Invalid targetCenter for distance:`, targetCenter); distance = 'Invalid Center'; pointsEarned = 0; } game.totalScore += pointsEarned; console.log(`Distance: ${distance} km, Points: ${pointsEarned}`); showFeedback(`❌ Incorrect! It was ${countryName}. Dist: ${distance} km. +${pointsEarned} pts.`, 'incorrect', 4000); addMarker(clickedCoords, 'red'); } updateScoreboard(); let flyToTarget = targetCenter; if (flyToTarget) { console.log("Flying map to:", flyToTarget); map.flyTo({ center: flyToTarget, zoom: Math.max(map.getZoom(), 4), speed: 0.5, curve: 1.5, essential: true }); map.once('moveend', () => { console.log("Map moveend after click handling flyTo."); if (!isCorrect && targetCenter) { console.log("Adding orange marker for correct center."); addMarker(targetCenter, 'orange'); } if (isCorrect) { setTimeout(clearHighlight, 1000); } const visualDelay = isCorrect ? 1500 : 2500; console.log(`Setting ${visualDelay}ms delay for pickNextCountry.`); setTimeout(() => { if(game.isGameRunning && game.currentMode === 'game') pickNextCountry(); }, visualDelay); }); } else { console.warn("No target center to fly to. Proceeding after fixed delay."); if (isCorrect) { setTimeout(clearHighlight, 1000); } const delay = isCorrect ? 3000 : 4000; setTimeout(() => { if(game.isGameRunning && game.currentMode === 'game') pickNextCountry(); }, delay); } console.log("--- handleMapClick (Game Mode) end ---"); }
-  function endGame(message = `🎉 Game Over! Final Score: ${game.totalScore}`) { const wasGameRunning = game.isGameRunning; if (!wasGameRunning && message !== "Game exited early.") { console.log("endGame called but game not running. Ignoring."); return; } console.log("--- endGame called --- Message:", message); game.currentMode = 'splash'; game.isGameRunning = false; game.isInputAllowed = false; if (wasGameRunning && message !== "Game exited early.") { playSound('gameover'); } stopBackgroundMusic(); clearInterval(game.timerInterval); exitTravelMapMode(); showFeedback(message, 'info', 10000); if(countryNameEl) countryNameEl.innerText = "Play Again?"; }
-  function explodeAtLatLng(coords, count = 15) { if (!Array.isArray(coords) || coords.length < 2 || typeof coords[0] !== 'number' || typeof coords[1] !== 'number') { console.warn("Invalid coords for explosion:", coords); return; } try { const point = map.project(new mapboxgl.LngLat(coords[0], coords[1])); if (!point || isNaN(point.x) || isNaN(point.y)) { console.warn("Explosion coords projected outside map view:", coords); return; } for (let i = 0; i < count; i++) { const star = document.createElement('div'); star.className = 'star-explosion'; star.style.left = `${point.x}px`; star.style.top = `${point.y}px`; const angle = Math.random() * 2 * Math.PI; const dist = Math.random() * 80 + 30; star.style.setProperty('--dx', `${Math.cos(angle) * dist}px`); star.style.setProperty('--dy', `${Math.sin(angle) * dist}px`); document.body.appendChild(star); setTimeout(() => star.remove(), 800); } } catch(e) { console.error("Error creating explosion:", e); } }
-  function clearFeedback() { if (game.feedbackTimeout) clearTimeout(game.feedbackTimeout); if(feedbackEl) feedbackEl.className = ''; game.feedbackTimeout = null; }
-  function initializeMap() { console.log("initializeMap: Starting..."); try { map = new mapboxgl.Map({ container: mapContainer, style: 'mapbox://styles/mapbox/satellite-v9', center: [0, 20], zoom: 1.8, pitch: 40, bearing: 0, antialias: true, projection: 'mercator' }); map.on('load', () => { console.log("map.on('load') event fired."); try { map.addSource('mapbox-dem', { 'type': 'raster-dem', 'url': 'mapbox://mapbox.mapbox-terrain-dem-v1', 'tileSize': 512, 'maxzoom': 14 }); map.setTerrain({ 'source': 'mapbox-dem', 'exaggeration': 1.5 }); console.log("Terrain added."); map.once('idle', () => { console.log("map.on('idle') fired after terrain. Calling loadGameData()..."); loadGameData(); }); } catch(loadEventError) { console.error("Error inside map.on('load'):", loadEventError); showFeedback(`Map Load Error: ${loadEventError.message}`, 'incorrect', 10000); if(startBtn) { startBtn.disabled = true; startBtn.innerText = "Map Load Error"; } if(travelMapBtn) {travelMapBtn.disabled = true;} } map.addControl(new mapboxgl.NavigationControl(), 'top-right'); map.addControl(new mapboxgl.FullscreenControl()); map.on('click', (e) => { if (game.currentMode === 'game') { handleMapClick(e); } else if (game.currentMode === 'travel') { handleTravelMapClick(e); } }); console.log("Consolidated map click listener attached."); }); map.on('error', (e) => { console.error('Mapbox GL Error Event:', e); if (e?.error) { showFeedback(`Map Error: ${e.error.message || 'Unknown'}`, 'incorrect', 10000); } if(startBtn) { startBtn.disabled = true; startBtn.innerText = "Map Error"; } if(travelMapBtn) {travelMapBtn.disabled = true;} game.isLoaded = false; }); console.log("Map event listeners attached."); } catch (mapInitError) { console.error("FATAL: initializeMap FAILED:", mapInitError); document.body.innerHTML = `<div style="padding: 20px; color: red; font-size: 18px; text-align: center;"><h1>FATAL ERROR</h1><p>Map initialization failed. Check Token/Network/WebGL. Check console.</p><p>Error: ${mapInitError.message}</p></div>`; } console.log("initializeMap: Finished."); }
-
-  // --- STARTUP ---
-  document.addEventListener('DOMContentLoaded', () => { console.log("DOMContentLoaded: Starting setup..."); try { mapContainer = document.getElementById('map'); splashScreen = document.getElementById('splash'); startBtn = document.getElementById('startBtn'); difficultySelect = document.getElementById('difficulty'); timerToggle = document.getElementById('timerToggle'); countryNameEl = document.getElementById('countryName'); timerDisplayEl = document.getElementById('timerDisplay'); totalScoreEl = document.getElementById('totalScore'); roundEl = document.getElementById('round'); streakEl = document.getElementById('streak'); feedbackEl = document.getElementById('feedback'); muteBtn = document.getElementById('muteBtn'); volumeSlider = document.getElementById('volumeSlider'); incorrectListEl = document.getElementById('incorrect-list'); incorrectListContainerEl = document.getElementById('incorrect-list-container'); exitGameBtn = document.getElementById('exitGameBtn'); travelMapBtn = document.getElementById('travelMapBtn'); exitTravelMapBtn = document.getElementById('exitTravelMapBtn'); travelLegendEl = document.getElementById('travel-legend'); scoreboardLeftEl = document.getElementById('scoreboard-left'); scoreboardCenterEl = document.getElementById('scoreboard-center'); scoreboardRightEl = document.getElementById('scoreboard-right'); gameTitleEl = document.getElementById('gameTitle'); if (!mapContainer || !splashScreen || !startBtn || !muteBtn || !volumeSlider || !countryNameEl || !incorrectListEl || !incorrectListContainerEl || !exitGameBtn || !travelMapBtn || !exitTravelMapBtn || !travelLegendEl || !scoreboardLeftEl || !scoreboardCenterEl || !scoreboardRightEl) { throw new Error("One or more critical UI elements not found in the HTML!"); } loadSounds(); loadTravelData(); initializeMap(); startBtn.disabled = true; startBtn.innerText = "Loading Data..."; travelMapBtn.disabled = true; exitGameBtn.style.display = 'none'; exitTravelMapBtn.style.display = 'none'; travelLegendEl.style.display = 'none'; incorrectListContainerEl.classList.remove('visible'); difficultySelect.value = game.difficulty; timerToggle.checked = game.timerEnabled; volumeSlider.value = game.musicVolumePreference; muteBtn.innerText = game.isMuted ? 'Unmute' : 'Mute'; muteBtn.style.backgroundColor = game.isMuted ? '#f44336' : '#555'; startBtn.onclick = startGame; travelMapBtn.onclick = enterTravelMapMode; if(timerToggle) timerToggle.onchange = () => { game.timerEnabled = timerToggle.checked; if (!game.timerEnabled) { clearInterval(game.timerInterval); updateTimerDisplay(); } console.log("Timer enabled:", game.timerEnabled); }; if(difficultySelect) difficultySelect.onchange = () => { game.difficulty = difficultySelect.value; console.log("Difficulty:", game.difficulty); }; muteBtn.onclick = toggleMute; volumeSlider.oninput = () => { updateMusicVolume(volumeSlider.value); }; exitGameBtn.onclick = () => { if (game.isGameRunning) { console.log("Exit Game button clicked."); endGame("Game exited early."); } }; exitTravelMapBtn.onclick = exitTravelMapMode; console.log("UI Event listeners attached."); } catch(startupError) { console.error("--- DOMContentLoaded FAILED ---:", startupError); document.body.innerHTML = `<div style="padding: 20px; color: red; font-size: 18px; text-align: center;"><h1>FATAL STARTUP ERROR</h1><p>${startupError.message}</p><p>Check console (F12).</p></div>`; } console.log("DOMContentLoaded: Setup finished."); });
-</script>
-
-</body>
-</html>
+}

@@ -60,6 +60,12 @@
     #splash { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: url('cover.png') no-repeat center center; background-color: #040b17; background-size: cover; z-index: 1000; display: flex; flex-direction: column; justify-content: center; align-items: center; color: #fff; font-size: 24px; text-shadow: 1px 1px 3px rgba(0,0,0,0.7); pointer-events: auto; transition: opacity 0.5s ease-out; }
     #splash.hidden { opacity: 0; pointer-events: none; }
     #settings { background: rgba(0, 0, 0, 0.8); padding: 25px 40px; border-radius: 12px; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.6); margin-top: 30px; backdrop-filter: blur(5px); width: 80%; max-width: 500px; /* Make width relative */ }
+    #loadingInstructions { text-align: left; margin-top: 20px; background: rgba(15, 30, 45, 0.85); border-radius: 10px; padding: 18px 20px; font-size: 15px; line-height: 1.5; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08); }
+    #loadingInstructions h2 { margin: 0 0 10px; font-size: 18px; color: #9cd2ff; text-align: center; }
+    #loadingInstructions ol { padding-left: 20px; margin: 0; }
+    #loadingInstructions li { margin-bottom: 8px; }
+    #loadingInstructions code { background: rgba(0,0,0,0.6); padding: 2px 6px; border-radius: 4px; font-size: 14px; color: #ffe8a6; }
+    #loadingInstructions footer { margin-top: 12px; font-size: 13px; color: rgba(255,255,255,0.7); text-align: center; }
     #settings label { display: block; margin-bottom: 15px; font-size: 16px; color: #eee; }
     #settings select, #settings input[type="checkbox"] { font-size: 15px; margin-left: 10px; vertical-align: middle; }
     #settings input[type="checkbox"] { transform: scale(1.2); }
@@ -152,6 +158,9 @@
         #feedback { font-size: 16px; max-width: 90%; padding: 8px; }
 
         #settings { padding: 20px 15px; width: 90%; max-width: none; }
+        #loadingInstructions { font-size: 14px; padding: 15px; }
+        #loadingInstructions h2 { font-size: 16px; }
+        #loadingInstructions code { font-size: 13px; }
         #settings label { font-size: 15px; }
         #settings select, #settings input[type="checkbox"] { font-size: 14px; }
         #startBtn { padding: 12px 20px; font-size: 16px; }
@@ -216,9 +225,20 @@
   <div id="coverMessage">Welcome to GeoSpot!</div>
   <div id="settings">
     <label> Difficulty: <select id="difficulty" style="padding: 5px;"> <option value="tourist">Tourist (20s - Names Visible)</option> <option value="easy">Easy (30s)</option> <option value="medium" selected>Medium (20s)</option> <option value="hard">Hard (15s)</option> </select> </label>
+    <label> Map Style: <select id="mapStyle" style="padding: 5px;"> <option value="satellite">Satellite</option> <option value="vector">Vector</option> </select> </label>
     <label> <input type="checkbox" id="timerToggle" checked> Timer Enabled </label>
     <button id="startBtn" disabled>Loading Data...</button>
     <button id="travelMapBtn" disabled>My Travel Map</button>
+    <div id="loadingInstructions">
+      <h2>Load the Modified GeoSpot</h2>
+      <ol>
+        <li>Download or clone the GeoSpot project folder to your computer.</li>
+        <li>Open a terminal, change into that folder with <code>cd geospot</code>, then start a lightweight server using <code>python -m http.server 8000</code>.</li>
+        <li>Once the server is running, open a browser and visit <code>http://localhost:8000/index.html</code>.</li>
+        <li>Wait for the data to finish loading here on the splash screen, pick your difficulty, map theme (Satellite or Vector), and tap <strong>Start</strong>.</li>
+      </ol>
+      <footer>Tip: Leave the terminal window open while you play. Stop the server anytime with <code>Ctrl + C</code>.</footer>
+    </div>
   </div>
 </div>
 
@@ -257,12 +277,16 @@
   const INITIAL_MUSIC_VOLUME = 0.3;
   const LOCAL_STORAGE_VISITED_KEY = 'geospot_visited';
   const LOCAL_STORAGE_WISHLIST_KEY = 'geospot_wishlist';
+  const MAP_STYLE_OPTIONS = {
+    satellite: 'mapbox://styles/mapbox/satellite-v9',
+    vector: 'mapbox://styles/mapbox/streets-v12'
+  };
 
   // --- DOM ELEMENTS ---
   let mapContainer, splashScreen, startBtn, difficultySelect, timerToggle, countryNameEl,
       timerDisplayEl, totalScoreEl, roundEl, streakEl, feedbackEl, muteBtn,
       volumeSlider, incorrectListEl, incorrectListContainerEl, exitGameBtn,
-      travelMapBtn, trackerBackBtn, // <-- ADDED trackerBackBtn, removed old backToMenuBtn
+      travelMapBtn, trackerBackBtn, mapStyleSelect, // <-- ADDED trackerBackBtn, removed old backToMenuBtn
       scoreboardEl, bottomLeftControls,
       trackerLegendEl; // <-- ADDED
 
@@ -277,8 +301,13 @@
     isMuted: false, musicVolumePreference: INITIAL_MUSIC_VOLUME, isGameRunning: false,
     incorrectlyGuessedCountries: new Set(),
     visitedCountries: new Set(),
-    wishlistCountries: new Set()
+    wishlistCountries: new Set(),
+    mapStyle: 'satellite'
   };
+
+  function getMapStyleUrl(styleKey) {
+      return MAP_STYLE_OPTIONS[styleKey] || MAP_STYLE_OPTIONS.satellite;
+  }
 
   // --- SOUND HANDLING ---
   function loadSounds() { const soundFiles = ['correct', 'wrong', 'timeout', 'start', 'gameover']; soundFiles.forEach(name => { try { game.sounds[name] = new Audio(`${name}.mp3`); game.sounds[name].onerror = () => console.warn(`Could not load sound: ${name}.mp3`); } catch(e) { console.error(`Error creating Audio for ${name}.mp3`, e); } }); }
@@ -292,11 +321,110 @@
   function updateScoreboard() { if (!totalScoreEl || !roundEl || !streakEl) return; try { totalScoreEl.innerText = game.totalScore; roundEl.innerText = `${game.round}/${MAX_ROUNDS}`; streakEl.innerText = game.streak; } catch(e){ console.error("Error updating scoreboard", e); } }
   function showFeedback(message, type = 'info', duration = 3000) { if (game.currentMode !== 'quiz' || !feedbackEl) return; try { console.log(`Showing feedback (${type}): ${message}`); feedbackEl.innerText = message; feedbackEl.className = `visible ${type}`; if (game.feedbackTimeout) clearTimeout(game.feedbackTimeout); game.feedbackTimeout = setTimeout(() => { if (feedbackEl) feedbackEl.className = ''; game.feedbackTimeout = null; }, duration); } catch(e){ console.error("Error showing feedback", e); } }
   function updateTimerDisplay() { if (game.currentMode !== 'quiz' || !timerDisplayEl) return; try { if (game.timerEnabled && game.timeLeft > 0) { timerDisplayEl.innerText = `(${game.timeLeft}s)`; } else { timerDisplayEl.innerText = ''; } } catch(e){ console.error("Error updating timer display", e); } }
+  function updateCountryLabelVisibility() {
+      if (!map || !map.getLayer('all-country-labels')) return;
+      let visibility = 'none';
+      if (game.currentMode === 'tracker') {
+          visibility = 'visible';
+      } else if (game.currentMode === 'quiz' && game.difficulty === 'tourist') {
+          visibility = 'visible';
+      }
+      try {
+          map.setLayoutProperty('all-country-labels', 'visibility', visibility);
+      } catch (e) {
+          console.error('Error updating label visibility:', e);
+      }
+  }
   function clearHighlight() { try { if (map && map.getSource('highlight-source') && map.getLayer('highlight-layer')) { map.getSource('highlight-source').setData({ type: 'FeatureCollection', features: [] }); console.log("Temp highlight cleared."); } } catch(e) { console.error("Error clearing highlight:", e)} }
   function highlightCountry(countryFeature) { if (game.currentMode !== 'quiz') return; const countryName = countryFeature?.properties?.name || "Unknown"; console.log(`Highlighting: ${countryName}`); try { clearHighlight(); if (map && map.getSource('highlight-source') && map.getLayer('highlight-layer') && countryFeature) { map.getSource('highlight-source').setData(countryFeature); } else if (!countryFeature) { console.warn("highlightCountry null feature"); } } catch(e) { console.error("Error highlighting country:", e)} }
   function clearMarker() { try { if (game.currentMarker) { game.currentMarker.remove(); game.currentMarker = null; console.log("Marker cleared"); } } catch(e) { console.error("Error clearing marker:", e)} }
   function addMarker(lngLat, color = 'red') { if (game.currentMode !== 'quiz') return; try { clearMarker(); if (!Array.isArray(lngLat) || lngLat.length !== 2 || typeof lngLat[0] !== 'number' || typeof lngLat[1] !== 'number') { console.error("Invalid LngLat for addMarker:", lngLat); return; } console.log("Adding marker:", lngLat, color); game.currentMarker = new mapboxgl.Marker({ color: color }).setLngLat(lngLat).addTo(map); } catch(e) { console.error("Error adding marker:", e)} }
   function updateMissedCountriesUI() { if (game.currentMode !== 'quiz' || !incorrectListEl || !incorrectListContainerEl) return; try { incorrectListEl.innerHTML = ''; if (game.incorrectlyGuessedCountries.size === 0) { incorrectListContainerEl.classList.remove('visible'); incorrectListContainerEl.style.display = 'none'; } else { incorrectListContainerEl.classList.add('visible'); incorrectListContainerEl.style.display = 'block'; const sortedNames = Array.from(game.incorrectlyGuessedCountries).sort(); sortedNames.forEach(name => { const listItem = document.createElement('li'); listItem.textContent = name; incorrectListEl.appendChild(listItem); }); incorrectListContainerEl.scrollTop = incorrectListContainerEl.scrollHeight; } /* Map updates */ if (map && map.isStyleLoaded() && map.getSource('missed-labels-source')) { const labelFeatures = []; for (const name of game.incorrectlyGuessedCountries) { const feat = game.countryFeaturesMap.get(name); if (feat?.properties?.center) { labelFeatures.push({ type: 'Feature', geometry: { type: 'Point', coordinates: feat.properties.center }, properties: { name } }); } } map.getSource('missed-labels-source').setData({ type: 'FeatureCollection', features: labelFeatures }); } if (map && map.isStyleLoaded() && map.getSource('persistent-red-source')) { const missedFeatures = []; for (const name of game.incorrectlyGuessedCountries) { const feat = game.countryFeaturesMap.get(name); if (feat) missedFeatures.push(feat); } map.getSource('persistent-red-source').setData({ type: 'FeatureCollection', features: missedFeatures }); } } catch(e) { console.error("Error updating missed countries UI", e); } }
+
+  function setupTerrainSource() { if (!map) return; try { if (!map.getSource('mapbox-dem')) { map.addSource('mapbox-dem', { type: 'raster-dem', url: 'mapbox://mapbox.mapbox-terrain-dem-v1', tileSize: 512, maxzoom: 14 }); console.log("Terrain source added."); } map.setTerrain({ source: 'mapbox-dem', exaggeration: 1.5 }); console.log("Terrain configured."); } catch (e) { console.error('Error configuring terrain:', e); } }
+
+  function ensureGameLayers(options = {}) {
+      if (!map) { console.warn('ensureGameLayers: Map not initialized.'); return; }
+      if (!map.isStyleLoaded()) { console.warn('ensureGameLayers: Style not yet loaded.'); return; }
+      if (!game.countriesGeoJson) { console.warn('ensureGameLayers: GeoJSON not ready.'); return; }
+
+      const { refreshData = false } = options;
+
+      try {
+          let countriesSource = map.getSource('countries');
+          if (!countriesSource) {
+              map.addSource('countries', { type: 'geojson', data: game.countriesGeoJson, promoteId: 'id' });
+              countriesSource = map.getSource('countries');
+              console.log("ensureGameLayers: Added 'countries' source.");
+          }
+          if (countriesSource && refreshData) {
+              countriesSource.setData(game.countriesGeoJson);
+              console.log("ensureGameLayers: Updated 'countries' source data.");
+          }
+
+          if (!map.getLayer('country-borders')) {
+              map.addLayer({ id: 'country-borders', type: 'line', source: 'countries', paint: { 'line-color': '#ffffff', 'line-width': 0.8, 'line-opacity': 0.6 }});
+              console.log("ensureGameLayers: Added 'country-borders'.");
+          }
+          if (!map.getLayer('country-fills-tracker')) {
+              map.addLayer({ id: 'country-fills-tracker', type: 'fill', source: 'countries', paint: { 'fill-color': ['case', ['boolean', ['feature-state', 'visited'], false], '#4CAF50', ['boolean', ['feature-state', 'wishlist'], false], '#FFEB3B', 'rgba(100, 100, 120, 0.3)'], 'fill-opacity': 0.7 }}, 'country-borders');
+              console.log("ensureGameLayers: Added 'country-fills-tracker'.");
+          }
+          if (!map.getSource('highlight-source')) {
+              map.addSource('highlight-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+              console.log("ensureGameLayers: Added 'highlight-source'.");
+          }
+          if (!map.getLayer('highlight-layer')) {
+              map.addLayer({ id: 'highlight-layer', type: 'fill', source: 'highlight-source', paint: { 'fill-color': '#00ff00', 'fill-opacity': 0.4 } }, 'country-borders');
+              console.log("ensureGameLayers: Added 'highlight-layer'.");
+          }
+          if (!map.getSource('persistent-red-source')) {
+              map.addSource('persistent-red-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+              console.log("ensureGameLayers: Added 'persistent-red-source'.");
+          }
+          if (!map.getLayer('persistent-red-layer')) {
+              map.addLayer({ id: 'persistent-red-layer', type: 'fill', source: 'persistent-red-source', paint: { 'fill-color': '#f44336', 'fill-opacity': 0.35 } }, 'highlight-layer');
+              console.log("ensureGameLayers: Added 'persistent-red-layer'.");
+          }
+          if (!map.getSource('missed-labels-source')) {
+              map.addSource('missed-labels-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+              console.log("ensureGameLayers: Added 'missed-labels-source'.");
+          }
+          if (!map.getLayer('missed-labels-layer')) {
+              map.addLayer({ id: 'missed-labels-layer', type: 'symbol', source: 'missed-labels-source', layout: { 'text-field': ['get', 'name'], 'text-font': ['Open Sans Semibold', 'Arial Unicode MS Bold'], 'text-size': 12, 'text-anchor': 'top', 'text-offset': [0, 0.6], 'text-allow-overlap': false }, paint: { 'text-color': '#FFDDDD', 'text-halo-color': '#330000', 'text-halo-width': 1.5, 'text-halo-blur': 0.5 } });
+              console.log("ensureGameLayers: Added 'missed-labels-layer'.");
+          }
+          if (!map.getLayer('all-country-labels')) {
+              map.addLayer({ id: 'all-country-labels', type: 'symbol', source: 'countries', layout: { 'text-field': ['get', 'name'], 'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'], 'text-size': 11, 'text-anchor': 'center', 'text-allow-overlap': false, 'text-optional': true, 'visibility': 'none' }, paint: { 'text-color': '#ffffff', 'text-halo-color': '#111133', 'text-halo-width': 1.5, 'text-halo-blur': 1 }});
+              console.log("ensureGameLayers: Added 'all-country-labels'.");
+          }
+
+          updateMissedCountriesUI();
+          updateCountryLabelVisibility();
+          if (game.currentMode === 'tracker') {
+              applyFeatureStates();
+          }
+          if (game.currentMode === 'quiz' && game.currentCountry) {
+              highlightCountry(game.currentCountry);
+          }
+      } catch (e) {
+          console.error('ensureGameLayers: Error ensuring layers.', e);
+      }
+  }
+
+  function handleStyleLoad() {
+      console.log(`handleStyleLoad: Style ready for ${game.mapStyle}.`);
+      setupTerrainSource();
+      ensureGameLayers({ refreshData: true });
+      updateCountryLabelVisibility();
+  }
+
+  function applyMapStyle() {
+      if (!map) { console.warn('applyMapStyle: Map not initialized.'); return; }
+      const styleUrl = getMapStyleUrl(game.mapStyle);
+      console.log(`applyMapStyle: Switching to ${styleUrl}.`);
+      map.setStyle(styleUrl);
+  }
 
   // --- Tracker Data Handling ---
   function loadTrackerData() {
@@ -388,25 +516,15 @@
           game.countriesGeoJson = { type: "FeatureCollection", features: validFeatures };
           if (validFeatures.length === 0) throw new Error("No valid country features.");
 
-          console.log("Adding/Verifying map sources/layers...");
-          // 1. Ensure Source Exists (With promoteId)
-          if (!map.getSource('countries')) { map.addSource('countries', { type: 'geojson', data: game.countriesGeoJson, promoteId: 'id' }); console.log("Added 'countries' source with promoteId: 'id'."); }
-          else { map.getSource('countries').setData(game.countriesGeoJson); console.log("Updated 'countries' source."); }
-          // --- Verification Log ---
-           try { const source = map.getSource('countries'); if (source && source.promoteId === 'id') { console.log("Verified: Source 'countries' promoteId is 'id'."); } else if (source) { console.error("Verification FAILED: Source 'countries' promoteId is NOT 'id'.", source.promoteId); } else { console.error("Verification FAILED: Source 'countries' not found!"); } } catch (sourceError) { console.error("Error verifying source:", sourceError); }
-
-          // 2. Ensure Base Border Layer Exists FIRST
-          if (!map.getLayer('country-borders')) { map.addLayer({ id: 'country-borders', type: 'line', source: 'countries', paint: { 'line-color': '#ffffff', 'line-width': 0.8, 'line-opacity': 0.6 }}); console.log("Added 'country-borders'."); }
-          // 3. Add Tracker Fill Layer
-          if (!map.getLayer('country-fills-tracker')) { map.addLayer({ id: 'country-fills-tracker', type: 'fill', source: 'countries', paint: { 'fill-color': ['case', ['boolean', ['feature-state', 'visited'], false], '#4CAF50', ['boolean', ['feature-state', 'wishlist'], false], '#FFEB3B', 'rgba(100, 100, 120, 0.3)'], 'fill-opacity': 0.7 }}, 'country-borders'); console.log("Added 'country-fills-tracker'."); }
-          // 4. Add Other Layers
-          if (!map.getSource('highlight-source')) { map.addSource('highlight-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } }); }
-          if (!map.getLayer('highlight-layer')) { map.addLayer({ id: 'highlight-layer', type: 'fill', source: 'highlight-source', paint: { 'fill-color': '#00ff00', 'fill-opacity': 0.4 } }, 'country-borders'); console.log("Added 'highlight-layer'."); }
-          if (!map.getSource('persistent-red-source')) { map.addSource('persistent-red-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } }); }
-          if (!map.getLayer('persistent-red-layer')) { map.addLayer({ id: 'persistent-red-layer', type: 'fill', source: 'persistent-red-source', paint: { 'fill-color': '#f44336', 'fill-opacity': 0.35 } }, 'highlight-layer'); console.log("Added 'persistent-red-layer'."); }
-          if (!map.getSource('missed-labels-source')) { map.addSource('missed-labels-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } }); }
-          if (!map.getLayer('missed-labels-layer')) { map.addLayer({ id: 'missed-labels-layer', type: 'symbol', source: 'missed-labels-source', layout: { 'text-field': ['get', 'name'], 'text-font': ['Open Sans Semibold', 'Arial Unicode MS Bold'], 'text-size': 12, 'text-anchor': 'top', 'text-offset': [0, 0.6], 'text-allow-overlap': false }, paint: { 'text-color': '#FFDDDD', 'text-halo-color': '#330000', 'text-halo-width': 1.5, 'text-halo-blur': 0.5 } }); console.log("Added 'missed-labels-layer'."); }
-          if (!map.getLayer('all-country-labels')) { map.addLayer({ id: 'all-country-labels', type: 'symbol', source: 'countries', layout: { 'text-field': ['get', 'name'], 'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'], 'text-size': 11, 'text-anchor': 'center', 'text-allow-overlap': false, 'text-optional': true, 'visibility': 'none' }, paint: { 'text-color': '#ffffff', 'text-halo-color': '#111133', 'text-halo-width': 1.5, 'text-halo-blur': 1 }}); console.log("Added 'all-country-labels'."); }
+          console.log("Preparing map layers with loaded data...");
+          const ensureLayers = () => ensureGameLayers({ refreshData: true });
+          if (map) {
+              if (map.isStyleLoaded()) {
+                  ensureLayers();
+              } else {
+                  map.once('style.load', ensureLayers);
+              }
+          }
 
           // 5. Mark as Loaded and Enable Buttons
           game.isLoaded = true; console.log("Game data marked as loaded.");
@@ -427,7 +545,7 @@
       setUIVisibility('tracker');
 
       // Show country names in tracker mode
-      try { if (map.getLayer('all-country-labels')) { map.setLayoutProperty('all-country-labels', 'visibility', 'visible'); console.log("Tracker Mode: Set country labels visible."); } else { console.warn("Layer 'all-country-labels' not found."); } } catch(e) { console.error("Error showing country labels:", e); }
+      updateCountryLabelVisibility();
 
       map.flyTo({ center: [0, 20], zoom: 1.8, pitch: 0, bearing: 0, speed: 0.8 });
       map.once('idle', () => {
@@ -444,7 +562,7 @@
       applyFeatureStates(true); // Clear visuals
 
       // Hide country names when exiting tracker mode
-      try { if (map.getLayer('all-country-labels')) { map.setLayoutProperty('all-country-labels', 'visibility', 'none'); console.log("Exiting Tracker Mode: Set country labels hidden."); } } catch(e) { console.error("Error hiding country labels:", e); }
+      updateCountryLabelVisibility();
 
       console.log("Returned to Menu.");
   }
@@ -463,9 +581,7 @@
       applyFeatureStates(true); // Clear tracker visuals
       updateMissedCountriesUI(); updateScoreboard();
 
-      try { // Tourist labels (only applies if difficulty is Tourist)
-          if (map.getLayer('all-country-labels')) { map.setLayoutProperty('all-country-labels', 'visibility', game.difficulty === 'tourist' ? 'visible' : 'none'); }
-      } catch(e) { console.error("Error setting tourist labels:", e); }
+      updateCountryLabelVisibility();
 
       setTimeout(() => { console.log("Starting first round..."); pickNextCountry(); }, 500);
   }
@@ -647,7 +763,10 @@
       stopBackgroundMusic(); clearInterval(game.timerInterval);
       clearHighlight(); clearMarker();
 
-      try { if (map.getLayer('all-country-labels')) map.setLayoutProperty('all-country-labels', 'visibility', 'none'); } catch(e) { console.error("Err hiding labels:", e); }
+      const previousModeForLabels = game.currentMode;
+      game.currentMode = 'menu';
+      updateCountryLabelVisibility();
+      game.currentMode = previousModeForLabels;
       applyFeatureStates(true); // Clear tracker states
 
       showFeedback(message, 'info', 10000);
@@ -670,16 +789,16 @@
       console.log("initializeMap: Starting...");
       try {
           map = new mapboxgl.Map({
-              container: mapContainer, style: 'mapbox://styles/mapbox/satellite-v9', center: [0, 20], zoom: 1.8, pitch: 40, bearing: 0, antialias: true, projection: 'mercator',
+              container: mapContainer, style: getMapStyleUrl(game.mapStyle), center: [0, 20], zoom: 1.8, pitch: 40, bearing: 0, antialias: true, projection: 'mercator',
               wheelZoomRate: 1 / 150, zoomRate: 0.4
           });
           console.log("Map instance created.");
 
+          map.on('style.load', handleStyleLoad);
+
           map.on('load', () => {
               console.log("map.on('load')");
               try {
-                  map.addSource('mapbox-dem', { 'type': 'raster-dem', 'url': 'mapbox://mapbox.mapbox-terrain-dem-v1', 'tileSize': 512, 'maxzoom': 14 });
-                  map.setTerrain({ 'source': 'mapbox-dem', 'exaggeration': 1.5 }); console.log("Terrain added.");
                   map.once('idle', () => { console.log("map.on('idle'). Calling loadGameData..."); loadGameData(); });
               } catch(loadErr) { console.error("Err in map load event:", loadErr); alert("Map resources failed to load."); }
               map.addControl(new mapboxgl.NavigationControl(), 'top-right'); map.addControl(new mapboxgl.FullscreenControl());
@@ -696,7 +815,7 @@
       console.log("DOMContentLoaded: Starting setup...");
       try {
           // Assign DOM elements
-          mapContainer = document.getElementById('map'); splashScreen = document.getElementById('splash'); startBtn = document.getElementById('startBtn'); difficultySelect = document.getElementById('difficulty'); timerToggle = document.getElementById('timerToggle'); countryNameEl = document.getElementById('countryName'); timerDisplayEl = document.getElementById('timerDisplay'); totalScoreEl = document.getElementById('totalScore'); roundEl = document.getElementById('round'); streakEl = document.getElementById('streak'); feedbackEl = document.getElementById('feedback'); muteBtn = document.getElementById('muteBtn'); volumeSlider = document.getElementById('volumeSlider'); incorrectListEl = document.getElementById('incorrect-list'); incorrectListContainerEl = document.getElementById('incorrect-list-container'); exitGameBtn = document.getElementById('exitGameBtn');
+          mapContainer = document.getElementById('map'); splashScreen = document.getElementById('splash'); startBtn = document.getElementById('startBtn'); difficultySelect = document.getElementById('difficulty'); timerToggle = document.getElementById('timerToggle'); mapStyleSelect = document.getElementById('mapStyle'); countryNameEl = document.getElementById('countryName'); timerDisplayEl = document.getElementById('timerDisplay'); totalScoreEl = document.getElementById('totalScore'); roundEl = document.getElementById('round'); streakEl = document.getElementById('streak'); feedbackEl = document.getElementById('feedback'); muteBtn = document.getElementById('muteBtn'); volumeSlider = document.getElementById('volumeSlider'); incorrectListEl = document.getElementById('incorrect-list'); incorrectListContainerEl = document.getElementById('incorrect-list-container'); exitGameBtn = document.getElementById('exitGameBtn');
           travelMapBtn = document.getElementById('travelMapBtn');
           trackerBackBtn = document.getElementById('trackerBackBtn'); // Get the new button
           scoreboardEl = document.getElementById('scoreboard');
@@ -704,7 +823,7 @@
           trackerLegendEl = document.getElementById('tracker-legend'); // Get legend
 
           // Check essential elements
-          if (!mapContainer || !splashScreen || !startBtn || !scoreboardEl || !travelMapBtn || !trackerBackBtn /* Check new button */ || !bottomLeftControls || !trackerLegendEl ) {
+          if (!mapContainer || !splashScreen || !startBtn || !scoreboardEl || !travelMapBtn || !trackerBackBtn /* Check new button */ || !bottomLeftControls || !trackerLegendEl || !mapStyleSelect ) {
               throw new Error("One or more critical UI elements not found!");
           }
           console.log("DOM elements assigned.");
@@ -719,7 +838,7 @@
           startBtn.disabled = true; startBtn.innerText = "Loading...";
           travelMapBtn.disabled = true;
 
-          difficultySelect.value = game.difficulty; timerToggle.checked = game.timerEnabled;
+          difficultySelect.value = game.difficulty; timerToggle.checked = game.timerEnabled; mapStyleSelect.value = game.mapStyle;
           volumeSlider.value = game.musicVolumePreference;
           muteBtn.innerText = game.isMuted ? 'Unmute' : 'Mute'; muteBtn.style.backgroundColor = game.isMuted ? '#f44336' : '#555';
           console.log("Initial UI state configured.");
@@ -730,8 +849,20 @@
           exitGameBtn.onclick = () => { if (game.isGameRunning) { endGame("Game exited early."); } };
           travelMapBtn.onclick = enterTrackerMode;
           trackerBackBtn.onclick = exitTrackerMode; // ADDED listener for new button
-          difficultySelect.onchange = () => { game.difficulty = difficultySelect.value; };
+          difficultySelect.onchange = () => {
+              game.difficulty = difficultySelect.value;
+              if (game.currentMode === 'quiz') {
+                  updateCountryLabelVisibility();
+              }
+          };
           timerToggle.onchange = () => { game.timerEnabled = timerToggle.checked; };
+          mapStyleSelect.onchange = () => {
+              const newStyle = mapStyleSelect.value;
+              if (newStyle && newStyle !== game.mapStyle) {
+                  game.mapStyle = newStyle;
+                  applyMapStyle();
+              }
+          };
           muteBtn.onclick = toggleMute;
           volumeSlider.oninput = () => { updateMusicVolume(volumeSlider.value); };
           console.log("Event listeners attached.");
